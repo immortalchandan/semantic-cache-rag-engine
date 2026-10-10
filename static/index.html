@@ -462,12 +462,18 @@
                     </div>
                 </div>
 
-                <div class="input-group" style="margin-bottom: 14px;">
+                <!-- Optional API Key Accordion / Override -->
+                <div class="input-group" style="margin-bottom: 16px; background: rgba(168, 85, 247, 0.05); border: 1px dashed rgba(168, 85, 247, 0.25); border-radius: 12px; padding: 12px 14px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                        <label class="input-label" style="margin-bottom: 0;">✨ Gemini API Key (Optional — Auto-Saved in Browser)</label>
+                        <span style="font-size: 0.78rem; font-weight: 700; color: #f1f5f9; display: flex; align-items: center; gap: 6px;">
+                            <span>⚡ Live Gemini Flash Active (Pre-Configured)</span>
+                        </span>
                         <span id="keyStatusBadge" style="font-size: 0.7rem; color: #34d399; font-weight: 600;"></span>
                     </div>
-                    <input type="password" id="geminiApiKeyInput" class="input-control" style="font-size: 0.82rem; padding: 10px 14px;" placeholder="AIzaSy... (Paste here to use Gemini Flash immediately)" oninput="saveApiKey(this.value)">
+                    <div style="font-size: 0.73rem; color: var(--text-dim); line-height: 1.45; margin-bottom: 8px;">
+                        Works out of the box with default system key. If the shared key encounters temporary Google rate limits or quota exhaustion, you can paste your own free Gemini API key below:
+                    </div>
+                    <input type="password" id="geminiApiKeyInput" class="input-control" style="font-size: 0.8rem; padding: 8px 12px; background: rgba(10, 15, 28, 0.9);" placeholder="Optional: Paste personal free Gemini API key if default hits quota..." oninput="saveApiKey(this.value)">
                 </div>
 
                 <div class="input-group">
