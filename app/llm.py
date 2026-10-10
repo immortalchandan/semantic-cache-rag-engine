@@ -22,17 +22,21 @@ class LLMService:
         self.gemini_api_key = os.getenv("GEMINI_API_KEY")
 
     async def generate_response(self, query: str, context_chunks: List[RetrievedChunk]) -> str:
-        # 1. If Gemini API key is present, use Google Gemini (free tier & ultra-high quality)
-        if self.gemini_api_key:
+        # Dynamically read from os.getenv in case user loaded the key after server startup
+        gemini_key = os.getenv("GEMINI_API_KEY") or self.gemini_api_key
+        groq_key = os.getenv("GROQ_API_KEY") or self.groq_api_key
+
+        # 1. If Gemini API key is present, use Google Gemini Flash
+        if gemini_key:
             try:
-                return await self._call_gemini(query, context_chunks)
+                return await self._call_gemini(query, context_chunks, gemini_key)
             except Exception as e:
                 logger.warning("Gemini call failed, falling back: %s", e)
 
         # 2. If Groq API key is present, use ultra-fast Llama 3 on Groq
-        if self.groq_api_key:
+        if groq_key:
             try:
-                return await self._call_groq(query, context_chunks)
+                return await self._call_groq(query, context_chunks, groq_key)
             except Exception as e:
                 logger.warning("Groq call failed, falling back to intelligent local synthesizer: %s", e)
 
@@ -40,19 +44,28 @@ class LLMService:
         # and composes a fluent, complete 2-3 line response.
         return self._synthesize_locally(query, context_chunks)
 
-    async def _call_gemini(self, query: str, context_chunks: List[RetrievedChunk]) -> str:
-        context_text = "\n\n".join([f"[{c.source}]: {c.text}" for c in context_chunks])
-        prompt = (
-            "You are a helpful, precise technical assistant.\n"
-            "Analyze the context below to answer the user's query.\n"
-            "Requirements:\n"
-            "1. Synthesize your own clean, fluent answer strictly based on the context.\n"
-            "2. Keep the answer between 2 to 4 complete sentences.\n"
-            "3. Do NOT quote long blocks of text verbatim; provide a direct, coherent, standalone response.\n\n"
-            f"Context:\n{context_text}\n\n"
-            f"User Query: {query}\n\n"
-            "Direct Answer (2-4 sentences):"
-        )
+    async def _call_gemini(self, query: str, context_chunks: List[RetrievedChunk], api_key: str) -> str:
+        if context_chunks:
+            context_text = "\n\n".join([f"[{c.source}]: {c.text}" for c in context_chunks])
+            prompt = (
+                "You are a helpful, precise technical assistant.\n"
+                "Analyze the context below to answer the user's query.\n"
+                "Requirements:\n"
+                "1. Synthesize your own clean, fluent answer strictly based on the context.\n"
+                "2. Keep the answer between 2 to 4 complete sentences.\n"
+                "3. Do NOT quote long blocks of text verbatim; provide a direct, coherent, standalone response.\n\n"
+                f"Context:\n{context_text}\n\n"
+                f"User Query: {query}\n\n"
+                "Direct Answer (2-4 sentences):"
+            )
+        else:
+            # Query didn't match indexed domain documents; answer directly as an AI assistant
+            prompt = (
+                "You are a helpful, precise technical assistant.\n"
+                "Answer the user query accurately in 2 to 4 concise, complete sentences.\n\n"
+                f"User Query: {query}\n\n"
+                "Direct Answer (2-4 sentences):"
+            )
 
         # Gemini Flash model fallback ladder: latest Flash models down to earlier versions
         models_to_try = [
@@ -69,7 +82,7 @@ class LLMService:
         async with httpx.AsyncClient(timeout=12.0) as client:
             for model_name in models_to_try:
                 try:
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={self.gemini_api_key}"
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
                     resp = await client.post(url, json=payload)
                     if resp.status_code == 200:
                         data = resp.json()
@@ -90,7 +103,7 @@ class LLMService:
         # If all Gemini models are exhausted or fail, fall back to intelligent local synthesis
         return self._synthesize_locally(query, context_chunks)
 
-    async def _call_groq(self, query: str, context_chunks: List[RetrievedChunk]) -> str:
+    async def _call_groq(self, query: str, context_chunks: List[RetrievedChunk], api_key: str) -> str:
         context_text = "\n\n".join([f"[{c.source}]: {c.text}" for c in context_chunks])
         prompt = (
             f"You are a helpful, precise technical assistant. "
@@ -103,7 +116,7 @@ class LLMService:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.post(
                 "https://api.groq.com/openai/v1/chat/completions",
-                headers={"Authorization": f"Bearer {self.groq_api_key}"},
+                headers={"Authorization": f"Bearer {api_key}"},
                 json={
                     "model": "llama-3.1-8b-instant",
                     "messages": [{"role": "user", "content": prompt}],
