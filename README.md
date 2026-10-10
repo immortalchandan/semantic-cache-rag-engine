@@ -4,55 +4,53 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.x-EE4C2C.svg)](https://pytorch.org/)
 [![Transformers](https://img.shields.io/badge/HuggingFace-Transformers-yellow.svg)](https://huggingface.co/)
-[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Render-46E3B7.svg?style=flat&logo=render)](https://semantic-cache-rag-engine.onrender.com/)
 
-An enterprise-grade, high-throughput AI engineering engine combining **sub-15ms semantic vector caching** with a **hybrid dense-sparse retrieval pipeline** (BM25 + Dense Embeddings fused via Reciprocal Rank Fusion).
+An enterprise-grade, high-throughput AI engineering engine combining **sub-15ms semantic vector caching** with a **hybrid dense-sparse retrieval pipeline** (BM25 + Dense Embeddings fused via Reciprocal Rank Fusion) and automated **Google Gemini Flash** multi-model generation.
 
-Bypasses redundant LLM token expenditures by evaluating cosine similarity over vector embeddings before invoking generation.
+🎮 **Live Interactive Telemetry Console:** [https://semantic-cache-rag-engine.onrender.com/](https://semantic-cache-rag-engine.onrender.com/)
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ System Architecture & Retrieval Pipeline
 
-```
-                       [ User Query / Prompt ]
-                                  │
-                                  ▼
-                 ┌─────────────────────────────────┐
-                 │  FastAPI Asynchronous Gateway   │
-                 └────────────────┬────────────────┘
-                                  │
-                                  ▼
-                 ┌─────────────────────────────────┐
-                 │  all-MiniLM-L6-v2 (384-D Vector)│
-                 └────────────────┬────────────────┘
-                                  │
-                                  ▼
-                 ┌─────────────────────────────────┐
-                 │    Semantic Vector Cache        │
-                 │   (Cosine Sim >= Threshold)     │
-                 └────────┬───────────────┬────────┘
-                          │               │
-            [ Cache Hit ] │               │ [ Cache Miss ]
-          (Latency < 15ms)│               │
-                          ▼               ▼
-                 ┌────────────────┐  ┌──────────────────────────────────┐
-                 │ Instant Return │  │  Hybrid Retrieval Engine         │
-                 │ (Bypasses LLM) │  │  • Dense Vector Cosine Search    │
-                 └────────────────┘  │  • Sparse BM25 Keyword Search   │
-                                     │  • Reciprocal Rank Fusion (RRF)  │
-                                     └────────────────┬─────────────────┘
-                                                      │
-                                                      ▼
-                                     ┌──────────────────────────────────┐
-                                     │  Context Assembly & Generation   │
-                                     │  (Groq Llama-3.1 / Synthesizer)  │
-                                     └────────────────┬─────────────────┘
-                                                      │
-                                                      ▼
-                                     ┌──────────────────────────────────┐
-                                     │  Store Query & Response in Cache │
-                                     └──────────────────────────────────┘
+```mermaid
+flowchart TD
+    User(["🌐 Client Query / Prompt"]) -->|"POST /v1/query"| Gateway["⚡ FastAPI Async Gateway<br/>(Token Bucket Rate Limiter: 20 req/min)"]
+    
+    Gateway -->|"Mean-Pooled L2 Normalization"| Embedding["🧠 all-MiniLM-L6-v2<br/>(384-Dimensional Dense Vector)"]
+    
+    Embedding -->|"Cosine Similarity Check"| Cache{"⚡ Semantic Vector Cache<br/>(Cosine Threshold: 0.75 - 0.85)"}
+    
+    subgraph S1 ["Sub-15ms Semantic Cache Fast-Path"]
+        Cache -->|"Cosine Sim >= 0.75 (HIT)"| CacheHit["🚀 Instant Vector Return<br/>(Latency: 5 - 15ms | Bypasses LLM)"]
+    end
+    
+    subgraph S2 ["Hybrid Dense-Sparse RAG Path (Cache MISS)"]
+        Cache -->|"Cosine Sim < 0.75 (MISS)"| HybridRetriever["🔍 Hybrid Retrieval Engine"]
+        
+        HybridRetriever -->|"Dense Cosine Search"| DenseRank["📊 Dense Vector Ranking<br/>(Semantic Concepts)"]
+        HybridRetriever -->|"Sparse Keyword Matching"| SparseRank["🔤 BM25 Lexical Ranking<br/>(Exact Tokens & Acronyms)"]
+        
+        DenseRank -->|"Composite Rank Scoring"| RRF["⚖️ Reciprocal Rank Fusion (RRF, k=60)<br/>score = 1/(60 + r_dense) + 1/(60 + r_sparse)"]
+        SparseRank -->|"Composite Rank Scoring"| RRF
+        
+        RRF -->|"Top-k Re-ranked Context"| LLM["✨ Google Gemini Flash Ladder<br/>(gemini-3.5-flash / gemini-3.5-flash-lite)"]
+        LLM -->|"Token-Budgeted 2-Sentence Summary"| StoreCache["💾 Store Vector & Response in Cache"]
+    end
+    
+    StoreCache --> FinalResp(["📤 Client HTTP 200 OK Response"])
+    CacheHit --> FinalResp
+
+    classDef primary fill:#1e1e2e,stroke:#cba6f7,stroke-width:2px,color:#cdd6f4;
+    classDef storage fill:#181825,stroke:#89b4fa,stroke-width:2px,color:#cdd6f4;
+    classDef success fill:#313244,stroke:#a6e3a1,stroke-width:2px,color:#a6e3a1;
+    classDef llm fill:#313244,stroke:#f9e2af,stroke-width:2px,color:#f9e2af;
+
+    class Gateway,Embedding,HybridRetriever,RRF primary;
+    class Cache,DenseRank,SparseRank,StoreCache storage;
+    class CacheHit success;
+    class LLM llm;
 ```
 
 ---
