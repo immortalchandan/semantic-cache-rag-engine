@@ -51,20 +51,19 @@ class LLMService:
                 "You are an expert AI technical assistant.\n"
                 "Review the context below to answer the user's query.\n"
                 "Requirements:\n"
-                "1. If the provided context is relevant to the query, synthesize a direct, fluent answer grounded in the context.\n"
-                "2. If the query asks about a general concept (or if the context does not cover it), answer the query directly and accurately using your expert knowledge.\n"
-                "3. Keep your response strictly between 2 to 4 complete, well-formed sentences.\n\n"
+                "1. Synthesize a concise, direct answer in exactly 2 complete sentences (maximum 50-60 words).\n"
+                "2. If the context is relevant, ground your answer in it; otherwise answer accurately using technical knowledge.\n"
+                "3. Avoid filler, greetings, or preamble; provide immediate value to minimize token usage.\n\n"
                 f"Context:\n{context_text}\n\n"
                 f"User Query: {query}\n\n"
-                "Direct Answer (2-4 sentences):"
+                "Short Answer (2 sentences):"
             )
         else:
-            # Query didn't match indexed domain documents; answer directly as an AI assistant
             prompt = (
-                "You are a helpful, precise technical assistant.\n"
-                "Answer the user query accurately in 2 to 4 concise, complete sentences.\n\n"
+                "You are an expert AI technical assistant.\n"
+                "Answer the user query accurately in exactly 2 complete, concise sentences (under 60 words). No preamble.\n\n"
                 f"User Query: {query}\n\n"
-                "Direct Answer (2-4 sentences):"
+                "Short Answer (2 sentences):"
             )
 
         # Gemini Flash model fallback ladder: verified active models
@@ -79,7 +78,7 @@ class LLMService:
             for model_name in models_to_try:
                 try:
                     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
-                    gen_config = {"temperature": 0.2, "maxOutputTokens": 600}
+                    gen_config = {"temperature": 0.1, "maxOutputTokens": 250}
                     if "lite" not in model_name:
                         gen_config["thinkingConfig"] = {"thinkingBudget": 0}
 
@@ -94,7 +93,7 @@ class LLMService:
                         if candidates and "content" in candidates[0] and "parts" in candidates[0]["content"]:
                             text = candidates[0]["content"]["parts"][0].get("text", "").strip()
                             if text:
-                                logger.info("Successfully generated response using model %s: %s", model_name, text[:80])
+                                logger.info("Successfully generated response using model %s:\n%s", model_name, text)
                                 return text
                     else:
                         logger.warning("Gemini model %s returned status %d: %s. Trying next...", model_name, resp.status_code, resp.text[:120])
