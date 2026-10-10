@@ -48,12 +48,12 @@ class LLMService:
         if context_chunks:
             context_text = "\n\n".join([f"[{c.source}]: {c.text}" for c in context_chunks])
             prompt = (
-                "You are a helpful, precise technical assistant.\n"
-                "Analyze the context below to answer the user's query.\n"
+                "You are an expert AI technical assistant.\n"
+                "Review the context below to answer the user's query.\n"
                 "Requirements:\n"
-                "1. Synthesize your own clean, fluent answer strictly based on the context.\n"
-                "2. Keep the answer between 2 to 4 complete sentences.\n"
-                "3. Do NOT quote long blocks of text verbatim; provide a direct, coherent, standalone response.\n\n"
+                "1. If the provided context is relevant to the query, synthesize a direct, fluent answer grounded in the context.\n"
+                "2. If the query asks about a general concept (or if the context does not cover it), answer the query directly and accurately using your expert knowledge.\n"
+                "3. Keep your response strictly between 2 to 4 complete, well-formed sentences.\n\n"
                 f"Context:\n{context_text}\n\n"
                 f"User Query: {query}\n\n"
                 "Direct Answer (2-4 sentences):"
