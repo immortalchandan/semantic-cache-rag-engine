@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AuraRAG — Semantic Caching & Hybrid Retrieval Engine</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-base: #06080f;
+            --bg-card: rgba(15, 23, 42, 0.65);
+            --border-glow: rgba(168, 85, 247, 0.25);
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --purple-accent: #a855f7;
+            --cyan-accent: #38bdf8;
+            --emerald-accent: #10b981;
+            --amber-accent: #f59e0b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --text-dim: #64748b;
+            --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-base);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(168, 85, 247, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 0%, rgba(56, 189, 248, 0.12) 0px, transparent 50%),
+                radial-gradient(at 50% 100%, rgba(16, 185, 129, 0.08) 0px, transparent 50%),
+                linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+            background-size: 100% 100%, 100% 100%, 100% 100%, 36px 36px, 36px 36px;
+            color: var(--text-main);
+            font-family: var(--font-sans);
+            min-height: 100vh;
+            padding: 32px 24px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 24px;
+            border-bottom: 1px solid var(--border-subtle);
+            margin-bottom: 32px;
+        }
+
+        .brand-cluster {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .logo-glyph {
+            width: 48px;
+            height: 48px;
+            border-radius: 14px;
+            background: linear-gradient(135deg, #a855f7, #38bdf8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 24px rgba(168, 85, 247, 0.45);
+        }
+
+        .brand-title {
+            font-size: 1.45rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            background: linear-gradient(135deg, #ffffff 40%, #c084fc 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .brand-subtitle {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(168, 85, 247, 0.12);
+            border: 1px solid rgba(168, 85, 247, 0.35);
+            color: #d8b4fe;
+            font-size: 0.72rem;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 9999px;
+            font-family: var(--font-mono);
+        }
+
+        .pulse-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background-color: #c084fc;
+            box-shadow: 0 0 8px #c084fc;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.95); opacity: 0.8; }
+            50% { transform: scale(1.35); opacity: 1; }
+            100% { transform: scale(0.95); opacity: 0.8; }
+        }
+
+        .tech-badges {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .tech-badge {
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 6px 12px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border-subtle);
+            color: #cbd5e1;
+        }
+
+        .grid-main {
+            display: grid;
+            grid-template-columns: 1.15fr 0.85fr;
+            gap: 28px;
+        }
+
+        @media (max-width: 1040px) {
+            .grid-main { grid-template-columns: 1fr; }
+        }
+
+        .glass-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border-subtle);
+            border-radius: 20px;
+            padding: 26px;
+            box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.5);
+            position: relative;
+        }
+
+        .glass-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(168, 85, 247, 0.4), transparent);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 22px;
+        }
+
+        .card-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #f1f5f9;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        .input-label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+
+        .input-control {
+            width: 100%;
+            background: rgba(10, 15, 28, 0.75);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 14px 16px;
+            color: #f8fafc;
+            font-family: var(--font-sans);
+            font-size: 0.95rem;
+            outline: none;
+            transition: all 0.25s ease;
+        }
+
+        .input-control:focus {
+            border-color: var(--purple-accent);
+            box-shadow: 0 0 16px rgba(168, 85, 247, 0.25);
+        }
+
+        .range-slider-wrap {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .range-slider-wrap input {
+            flex: 1;
+        }
+
+        .range-val {
+            font-family: var(--font-mono);
+            font-weight: 700;
+            color: #c084fc;
+            width: 50px;
+        }
+
+        .chips-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+
+        .chip {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-subtle);
+            padding: 6px 12px;
+            border-radius: 9999px;
+            font-size: 0.76rem;
+            color: #cbd5e1;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .chip:hover {
+            border-color: var(--purple-accent);
+            background: rgba(168, 85, 247, 0.15);
+            color: #fff;
+        }
+
+        .btn-flex {
+            display: flex;
+            gap: 14px;
+            margin-top: 24px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 14px 22px;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 0.88rem;
+            border: none;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: all 0.25s ease;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #9333ea, #3b82f6);
+            color: #ffffff;
+            box-shadow: 0 8px 24px rgba(147, 51, 234, 0.35);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 30px rgba(147, 51, 234, 0.5);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-subtle);
+            color: #cbd5e1;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        /* Result Panel */
+        .result-box {
+            margin-top: 28px;
+            background: rgba(10, 15, 28, 0.5);
+            border: 1px solid var(--border-subtle);
+            border-radius: 14px;
+            padding: 20px;
+        }
+
+        .result-badge-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+
+        .badge-cache-hit {
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.35);
+            padding: 4px 12px;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            font-family: var(--font-mono);
+        }
+
+        .badge-cache-miss {
+            background: rgba(245, 158, 11, 0.15);
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.35);
+            padding: 4px 12px;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            font-family: var(--font-mono);
+        }
+
+        .result-text {
+            font-size: 0.92rem;
+            line-height: 1.6;
+            color: #e2e8f0;
+            white-space: pre-wrap;
+        }
+
+        /* Terminal Console */
+        .terminal-container {
+            background: #04060c;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 14px;
+            overflow: hidden;
+            box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6);
+        }
+
+        .terminal-bar {
+            background: #090e1a;
+            padding: 10px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .window-dots { display: flex; gap: 6px; }
+        .window-dot { width: 10px; height: 10px; border-radius: 50%; }
+        .dot-red { background: #ef4444; }
+        .dot-yellow { background: #eab308; }
+        .dot-green { background: #22c55e; }
+
+        .terminal-body {
+            padding: 16px;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            line-height: 1.65;
+            height: 480px;
+            overflow-y: auto;
+            color: #94a3b8;
+        }
+
+        .term-line {
+            margin-bottom: 8px;
+            word-break: break-all;
+            display: flex;
+            gap: 8px;
+        }
+
+        .term-ts { color: var(--text-dim); flex-shrink: 0; }
+        .term-text.hit { color: #34d399; font-weight: 700; text-shadow: 0 0 12px rgba(52, 211, 153, 0.4); }
+        .term-text.miss { color: #fbbf24; }
+        .term-text.system { color: #c084fc; }
+
+        /* Metric Bar */
+        .metric-bar {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-top: 24px;
+        }
+
+        .metric-item {
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 14px;
+            text-align: center;
+        }
+
+        .metric-item .val {
+            font-family: var(--font-mono);
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #f8fafc;
+        }
+
+        .metric-item .lbl {
+            font-size: 0.72rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <div class="brand-cluster">
+                <div class="logo-glyph">
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2a10 10 0 1 0 10 10H12V2z"></path>
+                        <path d="M12 12L2.5 7.5"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="brand-title">AuraRAG Engine</h1>
+                    <div class="brand-subtitle">
+                        Sub-15ms Semantic Vector Caching & Hybrid Retrieval Pipeline
+                        <span class="status-pill"><span class="pulse-dot"></span> VECTOR INDEX READY</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tech-badges">
+                <span class="tech-badge">FASTAPI ASYNC</span>
+                <span class="tech-badge">all-MiniLM-L6-v2 (384-D)</span>
+                <span class="tech-badge">BM25 + DENSE RRF</span>
+                <span class="tech-badge">SEMANTIC CACHE</span>
+                <span class="tech-badge">COSINE THRESHOLDING</span>
+            </div>
+        </header>
+
+        <!-- Main Workspace -->
+        <div class="grid-main">
+            <!-- Left Panel -->
+            <div class="glass-card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        Semantic Query Playground
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label class="input-label">Enter Query or Prompt</label>
+                    <input type="text" id="queryInput" class="input-control" value="What is the refund policy for customers?">
+                    
+                    <div class="chips-row">
+                        <div class="chip" onclick="setQuery('What is the refund policy for customers?')">1. "What is refund policy?"</div>
+                        <div class="chip" onclick="setQuery('How do I get my money back if I cancel?')">2. "How do I get my money back?" (Semantic Match)</div>
+                        <div class="chip" onclick="setQuery('What are the production API rate limits?')">3. "API rate limits"</div>
+                        <div class="chip" onclick="setQuery('How many requests per minute are allowed on the API?')">4. "How many requests per minute?" (Semantic Match)</div>
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label class="input-label">Semantic Similarity Threshold: <span id="thresholdDisplay" class="range-val">0.85</span></label>
+                    <div class="range-slider-wrap">
+                        <input type="range" id="thresholdSlider" min="0.60" max="0.98" step="0.01" value="0.85" oninput="updateThreshold(this.value)">
+                    </div>
+                </div>
+
+                <div class="btn-flex">
+                    <button class="btn btn-primary" onclick="submitQuery()">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                        Execute Semantic Pipeline
+                    </button>
+                    <button class="btn btn-secondary" onclick="clearCache()">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                        Flush Cache
+                    </button>
+                </div>
+
+                <!-- Result Box -->
+                <div class="result-box" id="resultContainer" style="display: none;">
+                    <div class="result-badge-bar">
+                        <span id="cacheBadge" class="badge-cache-hit">CACHE HIT (14.2ms)</span>
+                        <span id="scoreBadge" style="font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-dim);">Cosine: 0.9412</span>
+                    </div>
+                    <div class="result-text" id="responseText"></div>
+                </div>
+            </div>
+
+            <!-- Right Panel: Telemetry & Logs -->
+            <div class="glass-card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                        Engine Telemetry Stream
+                    </div>
+                </div>
+
+                <div class="terminal-container">
+                    <div class="terminal-bar">
+                        <div class="window-dots">
+                            <span class="window-dot dot-red"></span>
+                            <span class="window-dot dot-yellow"></span>
+                            <span class="window-dot dot-green"></span>
+                        </div>
+                        <span style="font-family: var(--font-mono); font-size: 0.74rem; color: var(--text-dim);">aurarag-telemetry.log</span>
+                        <span style="font-family: var(--font-mono); font-size: 0.7rem; color: #a855f7;">LIVE</span>
+                    </div>
+                    <div class="terminal-body" id="terminalLog">
+                        <div class="term-line">
+                            <span class="term-ts">[SYSTEM]</span>
+                            <span class="term-text system">AuraRAG core online with all-MiniLM-L6-v2 vector embeddings (384 dimensions)</span>
+                        </div>
+                        <div class="term-line">
+                            <span class="term-ts">[SYSTEM]</span>
+                            <span class="term-text">Hybrid BM25 + Dense index populated with enterprise knowledge chunks</span>
+                        </div>
+                        <div class="term-line">
+                            <span class="term-ts">[SYSTEM]</span>
+                            <span class="term-text">Semantic cosine cache listening for sub-15ms vector matches</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Metrics -->
+                <div class="metric-bar">
+                    <div class="metric-item">
+                        <div class="val" id="metricTotalQueries">0</div>
+                        <div class="lbl">Total Queries</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="val" id="metricCacheHits" style="color: #34d399;">0</div>
+                        <div class="lbl">Cache Hits</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="val" id="metricAvgLatency" style="color: #38bdf8;">--</div>
+                        <div class="lbl">Avg Latency</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="val" id="metricCostSaved" style="color: #c084fc;">0%</div>
+                        <div class="lbl">Tokens Saved</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let totalQueries = 0;
+        let cacheHits = 0;
+        let latencies = [];
+
+        function log(msg, type = '') {
+            const term = document.getElementById('terminalLog');
+            const time = new Date().toLocaleTimeString();
+            const div = document.createElement('div');
+            div.className = 'term-line';
+            div.innerHTML = `<span class="term-ts">[${time}]</span> <span class="term-text ${type}">${msg}</span>`;
+            term.appendChild(div);
+            term.scrollTop = term.scrollHeight;
+        }
+
+        function setQuery(text) {
+            document.getElementById('queryInput').value = text;
+        }
+
+        function updateThreshold(val) {
+            document.getElementById('thresholdDisplay').textContent = val;
+        }
+
+        async function submitQuery() {
+            const query = document.getElementById('queryInput').value.trim();
+            const threshold = parseFloat(document.getElementById('thresholdSlider').value);
+
+            if (!query) return;
+
+            log(`Processing query: "${query}" (Threshold: ${threshold})`);
+
+            try {
+                const res = await fetch('/v1/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: query, similarity_threshold: threshold, top_k: 3 })
+                });
+
+                const data = await res.json();
+                totalQueries++;
+                latencies.push(data.latency_ms);
+
+                const avgLat = (latencies.reduce((a, b) => a + b, 0) / latencies.length).toFixed(1) + 'ms';
+                document.getElementById('metricTotalQueries').textContent = totalQueries;
+                document.getElementById('metricAvgLatency').textContent = avgLat;
+
+                document.getElementById('resultContainer').style.display = 'block';
+                document.getElementById('responseText').textContent = data.response;
+
+                if (data.cache_hit) {
+                    cacheHits++;
+                    document.getElementById('metricCacheHits').textContent = cacheHits;
+                    document.getElementById('metricCostSaved').textContent = ((cacheHits / totalQueries) * 100).toFixed(0) + '%';
+
+                    document.getElementById('cacheBadge').className = 'badge-cache-hit';
+                    document.getElementById('cacheBadge').textContent = `⚡ SEMANTIC CACHE HIT (${data.latency_ms}ms)`;
+                    document.getElementById('scoreBadge').textContent = `Cosine Similarity: ${data.similarity_score}`;
+
+                    log(`⚡ [SEMANTIC CACHE HIT] Served in ${data.latency_ms}ms! Cosine similarity: ${data.similarity_score} >= ${threshold} (Bypassed LLM)`, 'hit');
+                } else {
+                    document.getElementById('cacheBadge').className = 'badge-cache-miss';
+                    document.getElementById('cacheBadge').textContent = `🔍 HYBRID RRF SEARCH (${data.latency_ms}ms)`;
+                    document.getElementById('scoreBadge').textContent = `Indexed & Cached for future`;
+
+                    log(`🔍 [CACHE MISS -> RAG PIPELINE] Executed Dense + BM25 search in ${data.latency_ms}ms. Response generated & cached.`, 'miss');
+                }
+            } catch (e) {
+                log('Error executing query: ' + e.message, 'miss');
+            }
+        }
+
+        async function clearCache() {
+            try {
+                await fetch('/v1/cache', { method: 'DELETE' });
+                log('[CACHE FLUSHED] Semantic vector cache emptied.', 'system');
+            } catch (e) {
+                log('Error clearing cache: ' + e.message, 'miss');
+            }
+        }
+    </script>
+</body>
+</html>
