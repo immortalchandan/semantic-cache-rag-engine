@@ -115,8 +115,9 @@ async def query_pipeline(req: QueryRequest):
     # Step 4: Context Assembly & Generation
     llm_response = await llm_service.generate_response(req.query, retrieved_chunks, user_gemini_key=req.api_key)
 
-    # Step 5: Store query & response in Semantic Cache for future queries
-    semantic_cache.store(req.query, query_vector, llm_response)
+    # Step 5: Store query & response in Semantic Cache for future queries (only cache valid answers)
+    if not llm_response.startswith("I could not find relevant context"):
+        semantic_cache.store(req.query, query_vector, llm_response)
 
     latency_ms = (time.perf_counter() - start_time) * 1000.0
 

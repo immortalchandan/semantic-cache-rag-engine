@@ -90,15 +90,12 @@ class LLMService:
                         if candidates and "content" in candidates[0] and "parts" in candidates[0]["content"]:
                             text = candidates[0]["content"]["parts"][0].get("text", "").strip()
                             if text:
-                                logger.info("Successfully generated response using model %s", model_name)
+                                logger.info("Successfully generated response using model %s: %s", model_name, text[:80])
                                 return text
-                    elif resp.status_code in (429, 503):
-                        logger.warning("Model %s returned HTTP %d (rate limit/overloaded), attempting fallback model...", model_name, resp.status_code)
-                        continue
                     else:
-                        logger.warning("Model %s returned HTTP %d: %s. Trying next fallback model...", model_name, resp.status_code, resp.text)
+                        logger.error("Gemini model %s call failed with HTTP %d: %s", model_name, resp.status_code, resp.text)
                 except Exception as e:
-                    logger.warning("Model %s invocation error: %s. Trying next fallback model...", model_name, e)
+                    logger.error("Gemini model %s network/client error: %s", model_name, e)
 
         # If all Gemini models are exhausted or fail, fall back to intelligent local synthesis
         return self._synthesize_locally(query, context_chunks)
