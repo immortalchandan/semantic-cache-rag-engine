@@ -6,6 +6,7 @@ from rank_bm25 import BM25Okapi
 
 from app.models import RetrievedChunk
 from app.embedding import get_embedding_service
+from app.chunker import chunk_text
 
 logger = logging.getLogger(__name__)
 
@@ -28,17 +29,32 @@ class HybridRetriever:
 
     def ingest_documents(self, docs: List[Dict[str, Any]]):
         embedding_service = get_embedding_service()
-        new_texts = [d["content"] for d in docs]
+        chunked_records = []
+
+        for d in docs:
+            raw_content = d.get("content", "")
+            title = d.get("title", "Untitled")
+            parent_id = d.get("id") or str(uuid.uuid4())
+            metadata = d.get("metadata", {})
+
+            # Split document into concise 2-4 sentence chunks
+            chunks = chunk_text(raw_content, max_chunk_sentences=3, overlap_sentences=1)
+            for idx, c in enumerate(chunks):
+                chunk_record = {
+                    "id": f"{parent_id}_chunk_{idx}",
+                    "title": title,
+                    "content": c,
+                    "metadata": {**metadata, "parent_id": parent_id, "chunk_index": idx}
+                }
+                chunked_records.append(chunk_record)
+
+        if not chunked_records:
+            return
+
+        new_texts = [r["content"] for r in chunked_records]
         new_vectors = embedding_service.embed_batch(new_texts)
 
-        for d, vec in zip(docs, new_vectors):
-            doc_id = d.get("id") or str(uuid.uuid4())
-            record = {
-                "id": doc_id,
-                "title": d.get("title", "Untitled"),
-                "content": d["content"],
-                "metadata": d.get("metadata", {})
-            }
+        for record, vec in zip(chunked_records, new_vectors):
             self.documents.append(record)
             self.doc_vectors.append(vec)
             self.tokenized_corpus.append(record["content"].lower().split())
@@ -47,7 +63,8 @@ class HybridRetriever:
         if self.tokenized_corpus:
             self.bm25_index = BM25Okapi(self.tokenized_corpus)
 
-        logger.info("Ingested %d documents. Total index size: %d", len(docs), len(self.documents))
+        logger.info("Ingested %d raw documents into %d semantic chunks. Total index size: %d",
+                    len(docs), len(chunked_records), len(self.documents))
 
     def retrieve(self, query: str, query_vector: np.ndarray, top_k: int = 3) -> List[RetrievedChunk]:
         if not self.documents:

@@ -14,17 +14,18 @@ def test_semantic_cache_exact_and_cosine_hit():
     cache.store("What is refund policy?", v1, "100% refund in 30 days.")
 
     # 1. Exact match (cosine = 1.0)
-    hit, resp, score = cache.get_cached(v1, threshold=0.85)
+    hit, resp, score, matched = cache.get_cached(v1, threshold=0.85)
     assert hit is True
     assert resp == "100% refund in 30 days."
     assert score == pytest.approx(1.0, 0.001)
+    assert matched == "What is refund policy?"
 
     # 2. Near-semantic match (cosine ~ 0.96)
     v2 = np.zeros(384, dtype=np.float32)
     v2[0] = 0.96
     v2[1] = np.sqrt(1 - 0.96**2)  # Maintain unit norm
 
-    hit, resp, score = cache.get_cached(v2, threshold=0.85)
+    hit, resp, score, matched = cache.get_cached(v2, threshold=0.85)
     assert hit is True
     assert resp == "100% refund in 30 days."
     assert score >= 0.85
@@ -33,7 +34,7 @@ def test_semantic_cache_exact_and_cosine_hit():
     v3 = np.zeros(384, dtype=np.float32)
     v3[2] = 1.0
 
-    hit, resp, score = cache.get_cached(v3, threshold=0.85)
+    hit, resp, score, matched = cache.get_cached(v3, threshold=0.85)
     assert hit is False
     assert resp is None
 
@@ -54,5 +55,5 @@ def test_hybrid_retriever_rrf_scoring():
 
     chunks = retriever.retrieve(query, q_vec, top_k=1)
     assert len(chunks) == 1
-    assert chunks[0].id == "1"
+    assert chunks[0].id.startswith("1_chunk")
     assert chunks[0].source == "Refund"

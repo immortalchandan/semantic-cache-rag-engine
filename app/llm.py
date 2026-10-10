@@ -57,10 +57,9 @@ class LLMService:
             return "I could not find relevant context in the indexed knowledge base to answer this query."
 
         top_chunk = context_chunks[0]
-        sources = list(set([c.source for c in context_chunks]))
+        source = top_chunk.source
 
-        response = (
-            f"Based on {', '.join(sources)}: {top_chunk.text} "
-            f"\n\n(Retrieved via Hybrid Dense-Sparse Search with RRF score {top_chunk.score})"
-        )
+        # Extract the most relevant concise sentence from top_chunk
+        clean_text = top_chunk.text.strip()
+        response = f"According to {source}: {clean_text}"
         return response
