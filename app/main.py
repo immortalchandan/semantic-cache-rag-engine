@@ -138,6 +138,19 @@ def ingest_documents_endpoint(docs: List[IngestDocument]):
     return {"status": "success", "indexed_count": len(docs), "total_documents": len(hybrid_retriever.documents)}
 
 
+@app.delete("/v1/documents", status_code=200)
+def clear_documents_endpoint():
+    hybrid_retriever.clear_documents()
+    return {"status": "success", "message": "All documents cleared from hybrid index"}
+
+
+@app.post("/v1/documents/reset-samples", status_code=200)
+def reset_sample_documents_endpoint():
+    hybrid_retriever.clear_documents()
+    hybrid_retriever.ingest_documents(SAMPLE_DOCUMENTS)
+    return {"status": "success", "message": "Reset to default sample documents", "total_documents": len(hybrid_retriever.documents)}
+
+
 @app.delete("/v1/cache", status_code=200)
 def clear_semantic_cache():
     semantic_cache.clear()

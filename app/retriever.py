@@ -27,6 +27,13 @@ class HybridRetriever:
         self.bm25_index: BM25Okapi = None
         self.tokenized_corpus: List[List[str]] = []
 
+    def clear_documents(self):
+        """Clears all indexed documents and BM25 index."""
+        self.documents = []
+        self.doc_vectors = []
+        self.bm25_index = None
+        self.tokenized_corpus = []
+
     def ingest_documents(self, docs: List[Dict[str, Any]]):
         embedding_service = get_embedding_service()
         chunked_records = []
@@ -96,8 +103,15 @@ class HybridRetriever:
         # Sort by composite RRF score
         fused = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
 
+        # Filter: ensure candidate has meaningful relevance (dense similarity >= 0.25 or BM25 match)
         results = []
         for doc_idx, score in fused:
+            dense_sim = float(np.dot(query_vector, self.doc_vectors[doc_idx]))
+            bm25_val = bm25_raw_scores[doc_idx] if self.bm25_index else 0.0
+            # If the chunk has zero lexical overlap AND very poor vector similarity, exclude it
+            if dense_sim < 0.25 and bm25_val <= 0:
+                continue
+
             doc = self.documents[doc_idx]
             results.append(RetrievedChunk(
                 id=doc["id"],
@@ -107,4 +121,4 @@ class HybridRetriever:
                 metadata=doc["metadata"]
             ))
 
-        return results
+        return results[:top_k]

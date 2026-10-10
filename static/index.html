@@ -508,9 +508,17 @@
                         <div style="margin-top: 14px; background: rgba(0,0,0,0.3); padding: 14px; border-radius: 12px; border: 1px solid var(--border-subtle);">
                             <input type="text" id="docTitle" class="input-control" style="margin-bottom: 8px; font-size: 0.82rem;" placeholder="Document Title (e.g., Space Exploration Policy)">
                             <textarea id="docContent" class="input-control" style="height: 80px; font-size: 0.82rem; resize: vertical;" placeholder="Type ANY arbitrary facts or document paragraphs here..."></textarea>
-                            <button class="btn btn-secondary" style="margin-top: 10px; width: 100%; padding: 10px;" onclick="ingestCustomDoc()">
-                                ⚡ Embed & Index into Hybrid Vector Engine
-                            </button>
+                            <div style="display: flex; gap: 8px; margin-top: 10px;">
+                                <button class="btn btn-secondary" style="flex: 2; padding: 10px;" onclick="ingestCustomDoc()">
+                                    ⚡ Embed & Index into Hybrid Vector Engine
+                                </button>
+                                <button class="btn btn-secondary" style="flex: 1; padding: 10px; border-color: rgba(239, 68, 68, 0.4); color: #f87171;" onclick="clearAllDocs()" title="Remove default docs so index contains ONLY your custom docs">
+                                    🗑️ Wipe Docs
+                                </button>
+                                <button class="btn btn-secondary" style="padding: 10px;" onclick="resetSampleDocs()" title="Restore default enterprise documents">
+                                    ↺ Reset
+                                </button>
+                            </div>
                         </div>
                     </details>
                 </div>
@@ -713,6 +721,30 @@
                 }
             } catch (e) {
                 log('Ingestion network error: ' + e.message, 'miss');
+            }
+        }
+
+        async function clearAllDocs() {
+            if (!confirm("Are you sure you want to wipe all indexed documents? The index will be empty until you add your own documents.")) return;
+            try {
+                await fetch('/v1/documents', { method: 'DELETE' });
+                await fetch('/v1/cache', { method: 'DELETE' });
+                log('[DOCS WIPED] All documents and cache cleared. Knowledge base is now 100% blank.', 'system');
+                alert('All indexed documents cleared! You can now add purely your own documents.');
+            } catch (e) {
+                log('Error wiping documents: ' + e.message, 'miss');
+            }
+        }
+
+        async function resetSampleDocs() {
+            try {
+                const res = await fetch('/v1/documents/reset-samples', { method: 'POST' });
+                const d = await res.json();
+                await fetch('/v1/cache', { method: 'DELETE' });
+                log(`[DOCS RESET] Restored default enterprise documents (Total: ${d.total_documents}).`, 'hit');
+                alert('Default sample documents restored!');
+            } catch (e) {
+                log('Error resetting sample documents: ' + e.message, 'miss');
             }
         }
 

@@ -43,27 +43,52 @@ class LLMService:
     async def _call_gemini(self, query: str, context_chunks: List[RetrievedChunk]) -> str:
         context_text = "\n\n".join([f"[{c.source}]: {c.text}" for c in context_chunks])
         prompt = (
-            f"You are a helpful, concise AI technical assistant. "
-            f"Based STRICTLY on the context provided below, synthesize a clean, complete 2 to 4 sentence answer to the user query.\n\n"
+            "You are a helpful, precise technical assistant.\n"
+            "Analyze the context below to answer the user's query.\n"
+            "Requirements:\n"
+            "1. Synthesize your own clean, fluent answer strictly based on the context.\n"
+            "2. Keep the answer between 2 to 4 complete sentences.\n"
+            "3. Do NOT quote long blocks of text verbatim; provide a direct, coherent, standalone response.\n\n"
             f"Context:\n{context_text}\n\n"
             f"User Query: {query}\n\n"
-            f"Direct Answer:"
+            "Direct Answer (2-4 sentences):"
         )
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_api_key}"
+        # Gemini Flash model fallback ladder: latest Flash models down to earlier versions
+        models_to_try = [
+            "gemini-2.5-flash",
+            "gemini-2.0-flash",
+            "gemini-1.5-flash"
+        ]
+
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {"temperature": 0.2, "maxOutputTokens": 300}
         }
 
         async with httpx.AsyncClient(timeout=12.0) as client:
-            resp = await client.post(url, json=payload)
-            if resp.status_code == 200:
-                data = resp.json()
-                return data["candidates"][0]["content"]["parts"][0]["text"].strip()
-            else:
-                logger.warning("Gemini API returned status %d: %s", resp.status_code, resp.text)
-                return self._synthesize_locally(query, context_chunks)
+            for model_name in models_to_try:
+                try:
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={self.gemini_api_key}"
+                    resp = await client.post(url, json=payload)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        candidates = data.get("candidates", [])
+                        if candidates and "content" in candidates[0] and "parts" in candidates[0]["content"]:
+                            text = candidates[0]["content"]["parts"][0].get("text", "").strip()
+                            if text:
+                                logger.info("Successfully generated response using model %s", model_name)
+                                return text
+                    elif resp.status_code in (429, 503):
+                        logger.warning("Model %s returned HTTP %d (rate limit/overloaded), attempting fallback model...", model_name, resp.status_code)
+                        continue
+                    else:
+                        logger.warning("Model %s returned HTTP %d: %s. Trying next fallback model...", model_name, resp.status_code, resp.text)
+                except Exception as e:
+                    logger.warning("Model %s invocation error: %s. Trying next fallback model...", model_name, e)
+
+        # If all Gemini models are exhausted or fail, fall back to intelligent local synthesis
+        return self._synthesize_locally(query, context_chunks)
 
     async def _call_groq(self, query: str, context_chunks: List[RetrievedChunk]) -> str:
         context_text = "\n\n".join([f"[{c.source}]: {c.text}" for c in context_chunks])
