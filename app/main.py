@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -17,6 +17,7 @@ from app.embedding import get_embedding_service
 from app.semantic_cache import SemanticCache
 from app.retriever import HybridRetriever
 from app.llm import LLMService
+from app.rate_limiter import TokenBucketRateLimiter
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 semantic_cache = SemanticCache(default_threshold=0.85)
 hybrid_retriever = HybridRetriever(rrf_k=60)
 llm_service = LLMService()
+rate_limiter = TokenBucketRateLimiter(max_requests=20, window_seconds=60.0)
 
 
 # Pre-seed sample enterprise documents for instant demo showcase
@@ -88,8 +90,18 @@ def serve_dashboard():
 
 
 @app.post("/v1/query", response_model=QueryResponse)
-async def query_pipeline(req: QueryRequest):
-    logger.info("Received query request: '%s' | API Key present: %s", req.query, bool(req.api_key))
+async def query_pipeline(req: QueryRequest, request: Request):
+    # Enforce Rate Limiting per client IP (20 requests/minute)
+    client_ip = request.client.host if request.client else "unknown"
+    allowed, remaining, retry_after = rate_limiter.is_allowed(client_ip)
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Rate limit exceeded: 20 requests/min. Please retry in {retry_after} seconds."
+        )
+
+    logger.info("Received query request: '%s' | Client IP: %s (Remaining: %d) | API Key present: %s",
+                req.query, client_ip, remaining, bool(req.api_key))
     start_time = time.perf_counter()
     embedding_service = get_embedding_service()
 

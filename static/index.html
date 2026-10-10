@@ -654,6 +654,18 @@
                     })
                 });
 
+                if (res.status === 429) {
+                    const errData = await res.json();
+                    log(`⚠️ [RATE LIMITED] ${errData.detail}`, 'miss');
+                    document.getElementById('resultContainer').style.display = 'block';
+                    document.getElementById('cacheBadge').className = 'badge-cache-miss';
+                    document.getElementById('cacheBadge').textContent = '⚠️ RATE LIMITED (HTTP 429)';
+                    document.getElementById('responseText').textContent = errData.detail;
+                    document.getElementById('matchedQueryInfo').style.display = 'none';
+                    document.getElementById('chunksContainer').style.display = 'none';
+                    return;
+                }
+
                 const data = await res.json();
                 totalQueries++;
                 latencies.push(data.latency_ms);
