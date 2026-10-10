@@ -7,6 +7,7 @@ class QueryRequest(BaseModel):
     similarity_threshold: float = Field(0.85, ge=0.5, le=1.0, description="Cosine similarity threshold for semantic cache hits")
     top_k: int = Field(3, ge=1, le=10, description="Number of context chunks to retrieve")
     stream: bool = Field(False, description="Whether to stream response tokens")
+    api_key: Optional[str] = Field(None, description="Optional user-provided Gemini API key")
 
 
 class IngestDocument(BaseModel):

@@ -462,6 +462,14 @@
                     </div>
                 </div>
 
+                <div class="input-group" style="margin-bottom: 14px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <label class="input-label" style="margin-bottom: 0;">✨ Gemini API Key (Optional — Auto-Saved in Browser)</label>
+                        <span id="keyStatusBadge" style="font-size: 0.7rem; color: #34d399; font-weight: 600;"></span>
+                    </div>
+                    <input type="password" id="geminiApiKeyInput" class="input-control" style="font-size: 0.82rem; padding: 10px 14px;" placeholder="AIzaSy... (Paste here to use Gemini Flash immediately)" oninput="saveApiKey(this.value)">
+                </div>
+
                 <div class="input-group">
                     <label class="input-label">Enter ANY Custom Query or Prompt</label>
                     <input type="text" id="queryInput" class="input-control" placeholder="Type ANY arbitrary question here..." value="What is the refund policy for customers?">
@@ -599,9 +607,30 @@
             document.getElementById('thresholdDisplay').textContent = val;
         }
 
+        // Initialize saved Gemini API Key on load
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedKey = localStorage.getItem('gemini_api_key');
+            if (savedKey) {
+                document.getElementById('geminiApiKeyInput').value = savedKey;
+                document.getElementById('keyStatusBadge').textContent = '✓ Active';
+            }
+        });
+
+        function saveApiKey(val) {
+            const trimmed = val.trim();
+            if (trimmed) {
+                localStorage.setItem('gemini_api_key', trimmed);
+                document.getElementById('keyStatusBadge').textContent = '✓ Saved';
+            } else {
+                localStorage.removeItem('gemini_api_key');
+                document.getElementById('keyStatusBadge').textContent = '';
+            }
+        }
+
         async function submitQuery() {
             const query = document.getElementById('queryInput').value.trim();
             const threshold = parseFloat(document.getElementById('thresholdSlider').value);
+            const apiKey = (document.getElementById('geminiApiKeyInput').value || '').trim();
 
             if (!query) return;
 
@@ -611,7 +640,12 @@
                 const res = await fetch('/v1/query', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query: query, similarity_threshold: threshold, top_k: 3 })
+                    body: JSON.stringify({ 
+                        query: query, 
+                        similarity_threshold: threshold, 
+                        top_k: 3,
+                        api_key: apiKey || null
+                    })
                 });
 
                 const data = await res.json();

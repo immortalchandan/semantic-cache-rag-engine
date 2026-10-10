@@ -113,7 +113,7 @@ async def query_pipeline(req: QueryRequest):
     retrieved_chunks = hybrid_retriever.retrieve(req.query, query_vector, top_k=req.top_k)
 
     # Step 4: Context Assembly & Generation
-    llm_response = await llm_service.generate_response(req.query, retrieved_chunks)
+    llm_response = await llm_service.generate_response(req.query, retrieved_chunks, user_gemini_key=req.api_key)
 
     # Step 5: Store query & response in Semantic Cache for future queries
     semantic_cache.store(req.query, query_vector, llm_response)

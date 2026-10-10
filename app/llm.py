@@ -21,9 +21,9 @@ class LLMService:
         self.groq_api_key = os.getenv("GROQ_API_KEY")
         self.gemini_api_key = os.getenv("GEMINI_API_KEY")
 
-    async def generate_response(self, query: str, context_chunks: List[RetrievedChunk]) -> str:
-        # Dynamically read from os.getenv in case user loaded the key after server startup
-        gemini_key = os.getenv("GEMINI_API_KEY") or self.gemini_api_key
+    async def generate_response(self, query: str, context_chunks: List[RetrievedChunk], user_gemini_key: str = None) -> str:
+        # Dynamically read from user request, os.getenv, or saved key
+        gemini_key = user_gemini_key or os.getenv("GEMINI_API_KEY") or self.gemini_api_key
         groq_key = os.getenv("GROQ_API_KEY") or self.groq_api_key
 
         # 1. If Gemini API key is present, use Google Gemini Flash
