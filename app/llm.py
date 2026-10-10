@@ -1,17 +1,20 @@
 import os
+import re
 import logging
 from typing import List
 import httpx
 
 from app.models import RetrievedChunk
+from app.embedding import get_embedding_service
 
 logger = logging.getLogger(__name__)
 
 
 class LLMService:
     """
-    RAG generation engine. Supports external providers (Groq/Gemini/OpenAI) if keys are provided,
-    and includes an intelligent fallback synthesizer so the system functions 100% out-of-the-box in local and demo modes.
+    RAG generation engine. Supports external providers (Groq/Gemini) if keys are provided.
+    Includes an intelligent extractive sentence ranker and synthesizer that analyzes the retrieved
+    document chunks and constructs a crisp, cohesive 2-4 sentence summary tailored directly to the query.
     """
 
     def __init__(self):
@@ -19,20 +22,54 @@ class LLMService:
         self.gemini_api_key = os.getenv("GEMINI_API_KEY")
 
     async def generate_response(self, query: str, context_chunks: List[RetrievedChunk]) -> str:
-        # If Groq API key is present, use ultra-fast Llama 3 on Groq
+        # 1. If Gemini API key is present, use Google Gemini (free tier & ultra-high quality)
+        if self.gemini_api_key:
+            try:
+                return await self._call_gemini(query, context_chunks)
+            except Exception as e:
+                logger.warning("Gemini call failed, falling back: %s", e)
+
+        # 2. If Groq API key is present, use ultra-fast Llama 3 on Groq
         if self.groq_api_key:
             try:
                 return await self._call_groq(query, context_chunks)
             except Exception as e:
-                logger.warning("Groq call failed, falling back to local synthesizer: %s", e)
+                logger.warning("Groq call failed, falling back to intelligent local synthesizer: %s", e)
 
-        # Standalone synthesizer: extracts and formats precise contextual response
+        # 3. Intelligent Extractive Synthesizer: analyzes all chunks, scores each sentence against the query,
+        # and composes a fluent, complete 2-3 line response.
         return self._synthesize_locally(query, context_chunks)
+
+    async def _call_gemini(self, query: str, context_chunks: List[RetrievedChunk]) -> str:
+        context_text = "\n\n".join([f"[{c.source}]: {c.text}" for c in context_chunks])
+        prompt = (
+            f"You are a helpful, concise AI technical assistant. "
+            f"Based STRICTLY on the context provided below, synthesize a clean, complete 2 to 4 sentence answer to the user query.\n\n"
+            f"Context:\n{context_text}\n\n"
+            f"User Query: {query}\n\n"
+            f"Direct Answer:"
+        )
+
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_api_key}"
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.2, "maxOutputTokens": 300}
+        }
+
+        async with httpx.AsyncClient(timeout=12.0) as client:
+            resp = await client.post(url, json=payload)
+            if resp.status_code == 200:
+                data = resp.json()
+                return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+            else:
+                logger.warning("Gemini API returned status %d: %s", resp.status_code, resp.text)
+                return self._synthesize_locally(query, context_chunks)
 
     async def _call_groq(self, query: str, context_chunks: List[RetrievedChunk]) -> str:
         context_text = "\n\n".join([f"[{c.source}]: {c.text}" for c in context_chunks])
         prompt = (
-            f"You are a helpful and precise technical assistant. Answer the user query using the context below.\n\n"
+            f"You are a helpful, precise technical assistant. "
+            f"Answer the user query in 2 to 3 concise, complete, professional sentences using the context below.\n\n"
             f"Context:\n{context_text}\n\n"
             f"Query: {query}\n\n"
             f"Answer:"
@@ -46,23 +83,61 @@ class LLMService:
                     "model": "llama-3.1-8b-instant",
                     "messages": [{"role": "user", "content": prompt}],
                     "temperature": 0.2,
-                    "max_tokens": 400
+                    "max_tokens": 250
                 }
             )
             data = resp.json()
-            return data["choices"][0]["message"]["content"]
+            return data["choices"][0]["message"]["content"].strip()
 
     def _synthesize_locally(self, query: str, context_chunks: List[RetrievedChunk]) -> str:
         if not context_chunks:
             return "I could not find relevant context in the indexed knowledge base to answer this query."
 
-        # Take the top matching chunk
-        primary_chunk = context_chunks[0]
-        source = primary_chunk.source
+        # Gather sentences from all top retrieved chunks
+        all_sentences = []
+        sources = []
 
-        # Ensure answer ends with a proper sentence terminator (.!?)
-        text = primary_chunk.text.strip()
-        if not text.endswith(('.', '!', '?')):
-            text += '.'
+        for chunk in context_chunks[:3]:
+            if chunk.source not in sources:
+                sources.append(chunk.source)
+            # Split chunk into clean sentences
+            raw_sents = re.split(r'(?<=[.!?])\s+', chunk.text.strip())
+            for s in raw_sents:
+                clean_s = s.strip()
+                if len(clean_s) > 20 and clean_s not in all_sentences:
+                    all_sentences.append(clean_s)
 
-        return f"Based on '{source}': {text}"
+        if not all_sentences:
+            return f"Based on '{context_chunks[0].source}': {context_chunks[0].text}"
+
+        # Analyze sentences against the query vector to pick the 2 most informative sentences
+        try:
+            embedding_service = get_embedding_service()
+            query_vec = embedding_service.embed_text(query)
+            sent_vecs = embedding_service.embed_batch(all_sentences)
+
+            scored = []
+            for sent, s_vec in zip(all_sentences, sent_vecs):
+                import numpy as np
+                sim = float(np.dot(query_vec, s_vec))
+                scored.append((sent, sim))
+
+            # Sort by relevance to query
+            scored.sort(key=lambda x: x[1], reverse=True)
+            # Pick top 2 most relevant complete sentences
+            selected_sentences = [item[0] for item in scored[:2]]
+        except Exception as e:
+            logger.warning("Local sentence scoring fallback: %s", e)
+            selected_sentences = all_sentences[:2]
+
+        # Ensure every sentence ends cleanly with proper punctuation
+        formatted_sents = []
+        for s in selected_sentences:
+            s_clean = s.strip()
+            if not s_clean.endswith(('.', '!', '?')):
+                s_clean += '.'
+            formatted_sents.append(s_clean)
+
+        combined_text = " ".join(formatted_sents)
+        source_label = sources[0] if len(sources) == 1 else f"{sources[0]} and {sources[1]}"
+        return f"According to {source_label}, {combined_text}"
