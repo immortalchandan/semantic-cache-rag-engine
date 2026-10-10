@@ -1,28 +1,49 @@
 import re
-from typing import List, Dict, Any
+from typing import List
 
 
-def chunk_text(text: str, max_chunk_sentences: int = 3, overlap_sentences: int = 1) -> List[str]:
+def chunk_text(text: str, target_chunk_size: int = 400, overlap_size: int = 80) -> List[str]:
     """
-    Sentence-based semantic chunker with sliding window overlap.
-    Breaks large documents down into 2-4 sentence cohesive chunks.
+    Paragraph and sentence-aware chunker that preserves complete ideas and sentences.
+    Ensures chunks are cohesive, self-contained, and typically 3-5 complete sentences (~300-500 chars).
     """
-    # Split text into sentences using regex
-    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
-    sentences = [s.strip() for s in sentences if s.strip()]
+    clean_text = text.strip()
+    if not clean_text:
+        return []
 
-    if not sentences:
-        return [text] if text.strip() else []
+    # If document is already reasonably short, keep it as a complete entity
+    if len(clean_text) <= target_chunk_size + 100:
+        return [clean_text]
 
-    if len(sentences) <= max_chunk_sentences:
-        return [" ".join(sentences)]
+    # Split into clean paragraphs first
+    paragraphs = [p.strip() for p in re.split(r'\n+', clean_text) if p.strip()]
 
     chunks = []
-    step = max(1, max_chunk_sentences - overlap_sentences)
-    for i in range(0, len(sentences), step):
-        chunk = " ".join(sentences[i:i + max_chunk_sentences])
-        chunks.append(chunk)
-        if i + max_chunk_sentences >= len(sentences):
-            break
+    current_chunk = []
+    current_len = 0
+
+    for para in paragraphs:
+        # Split paragraph into complete sentences
+        sentences = re.split(r'(?<=[.!?])\s+', para)
+        sentences = [s.strip() for s in sentences if s.strip()]
+
+        for sent in sentences:
+            sent_len = len(sent)
+            if current_len + sent_len > target_chunk_size and current_chunk:
+                # Store completed chunk
+                chunks.append(" ".join(current_chunk))
+                # Keep last sentence as overlap for conversational continuity
+                if len(current_chunk) > 1:
+                    current_chunk = [current_chunk[-1], sent]
+                    current_len = len(current_chunk[0]) + sent_len + 1
+                else:
+                    current_chunk = [sent]
+                    current_len = sent_len
+            else:
+                current_chunk.append(sent)
+                current_len += sent_len + 1
+
+    if current_chunk:
+        chunks.append(" ".join(current_chunk))
 
     return chunks

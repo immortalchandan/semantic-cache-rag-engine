@@ -37,8 +37,8 @@ class HybridRetriever:
             parent_id = d.get("id") or str(uuid.uuid4())
             metadata = d.get("metadata", {})
 
-            # Split document into concise 2-4 sentence chunks
-            chunks = chunk_text(raw_content, max_chunk_sentences=3, overlap_sentences=1)
+            # Split document into complete, coherent semantic chunks (~350-450 chars)
+            chunks = chunk_text(raw_content, target_chunk_size=400, overlap_size=80)
             for idx, c in enumerate(chunks):
                 chunk_record = {
                     "id": f"{parent_id}_chunk_{idx}",

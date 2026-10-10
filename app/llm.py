@@ -56,10 +56,13 @@ class LLMService:
         if not context_chunks:
             return "I could not find relevant context in the indexed knowledge base to answer this query."
 
-        top_chunk = context_chunks[0]
-        source = top_chunk.source
+        # Take the top matching chunk
+        primary_chunk = context_chunks[0]
+        source = primary_chunk.source
 
-        # Extract the most relevant concise sentence from top_chunk
-        clean_text = top_chunk.text.strip()
-        response = f"According to {source}: {clean_text}"
-        return response
+        # Ensure answer ends with a proper sentence terminator (.!?)
+        text = primary_chunk.text.strip()
+        if not text.endswith(('.', '!', '?')):
+            text += '.'
+
+        return f"Based on '{source}': {text}"
