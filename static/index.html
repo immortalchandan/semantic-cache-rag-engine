@@ -463,21 +463,28 @@
                 </div>
 
                 <div class="input-group">
-                    <label class="input-label">Enter Query or Prompt</label>
-                    <input type="text" id="queryInput" class="input-control" value="What is the refund policy for customers?">
+                    <label class="input-label">Enter ANY Custom Query or Prompt</label>
+                    <input type="text" id="queryInput" class="input-control" placeholder="Type ANY arbitrary question here..." value="What is the refund policy for customers?">
                     
+                    <div style="margin-top: 10px;">
+                        <span style="font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em;">Quick Load Knowledge Prompts:</span>
+                    </div>
                     <div class="chips-row">
-                        <div class="chip" onclick="setQuery('What is the refund policy for customers?')">1. "What is refund policy?"</div>
-                        <div class="chip" onclick="setQuery('How do I get my money back if I cancel?')">2. "How do I get my money back?" (Semantic Match)</div>
-                        <div class="chip" onclick="setQuery('What are the production API rate limits?')">3. "API rate limits"</div>
-                        <div class="chip" onclick="setQuery('How many requests per minute are allowed on the API?')">4. "How many requests per minute?" (Semantic Match)</div>
+                        <div class="chip" onclick="setQuery('What is the refund policy for customers?')">📌 "What is refund policy?"</div>
+                        <div class="chip" onclick="setQuery('How do I get my money back if I cancel?')">🔄 "How do I get my money back?" (Paraphrase)</div>
+                        <div class="chip" onclick="setQuery('What are the production API rate limits?')">📌 "What are API rate limits?"</div>
+                        <div class="chip" onclick="setQuery('How many requests per minute can my client send?')">🔄 "How many requests per minute?" (Paraphrase)</div>
+                        <div class="chip" onclick="setQuery('What encryption and keys are used for session tokens?')">📌 "JWT & mTLS Encryption"</div>
                     </div>
                 </div>
 
                 <div class="input-group">
-                    <label class="input-label">Semantic Similarity Threshold: <span id="thresholdDisplay" class="range-val">0.85</span></label>
+                    <label class="input-label">Semantic Similarity Threshold: <span id="thresholdDisplay" class="range-val">0.75</span></label>
                     <div class="range-slider-wrap">
-                        <input type="range" id="thresholdSlider" min="0.60" max="0.98" step="0.01" value="0.85" oninput="updateThreshold(this.value)">
+                        <input type="range" id="thresholdSlider" min="0.50" max="0.95" step="0.01" value="0.75" oninput="updateThreshold(this.value)">
+                    </div>
+                    <div style="font-size: 0.74rem; color: var(--text-dim); margin-top: 6px;">
+                        💡 <b>0.75 is the industry standard for MiniLM:</b> Matches semantically equivalent phrases with different vocabulary.
                     </div>
                 </div>
 
@@ -492,13 +499,36 @@
                     </button>
                 </div>
 
+                <!-- Custom Knowledge Ingestion Accordion -->
+                <div style="margin-top: 24px; border-top: 1px solid var(--border-subtle); padding-top: 18px;">
+                    <details style="cursor: pointer;">
+                        <summary style="font-size: 0.85rem; font-weight: 700; color: #c084fc; display: flex; align-items: center; gap: 8px;">
+                            <span>➕ Add Your Own Knowledge Document (Prove Zero-Hardcoding)</span>
+                        </summary>
+                        <div style="margin-top: 14px; background: rgba(0,0,0,0.3); padding: 14px; border-radius: 12px; border: 1px solid var(--border-subtle);">
+                            <input type="text" id="docTitle" class="input-control" style="margin-bottom: 8px; font-size: 0.82rem;" placeholder="Document Title (e.g., Space Exploration Policy)">
+                            <textarea id="docContent" class="input-control" style="height: 80px; font-size: 0.82rem; resize: vertical;" placeholder="Type ANY arbitrary facts or document paragraphs here..."></textarea>
+                            <button class="btn btn-secondary" style="margin-top: 10px; width: 100%; padding: 10px;" onclick="ingestCustomDoc()">
+                                ⚡ Embed & Index into Hybrid Vector Engine
+                            </button>
+                        </div>
+                    </details>
+                </div>
+
                 <!-- Result Box -->
                 <div class="result-box" id="resultContainer" style="display: none;">
                     <div class="result-badge-bar">
                         <span id="cacheBadge" class="badge-cache-hit">CACHE HIT (14.2ms)</span>
                         <span id="scoreBadge" style="font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-dim);">Cosine: 0.9412</span>
                     </div>
+                    <div id="matchedQueryInfo" style="font-family: var(--font-mono); font-size: 0.75rem; color: #38bdf8; margin-bottom: 8px; display: none;"></div>
                     <div class="result-text" id="responseText"></div>
+
+                    <!-- Retrieved Chunks Detail -->
+                    <div id="chunksContainer" style="margin-top: 14px; display: none;">
+                        <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--text-dim); margin-bottom: 6px;">Top Retrieved Chunks (Dense + BM25 RRF):</div>
+                        <div id="chunksList"></div>
+                    </div>
                 </div>
             </div>
 
@@ -618,16 +648,71 @@
                     document.getElementById('cacheBadge').textContent = `⚡ SEMANTIC CACHE HIT (${data.latency_ms}ms)`;
                     document.getElementById('scoreBadge').textContent = `Cosine Similarity: ${data.similarity_score}`;
 
+                    const matchEl = document.getElementById('matchedQueryInfo');
+                    if (data.matched_cached_query) {
+                        matchEl.style.display = 'block';
+                        matchEl.textContent = `🎯 Cosine match with prior query: "${data.matched_cached_query}"`;
+                    } else {
+                        matchEl.style.display = 'none';
+                    }
+
+                    document.getElementById('chunksContainer').style.display = 'none';
                     log(`⚡ [SEMANTIC CACHE HIT] Served in ${data.latency_ms}ms! Cosine similarity: ${data.similarity_score} >= ${threshold} (Bypassed LLM)`, 'hit');
                 } else {
                     document.getElementById('cacheBadge').className = 'badge-cache-miss';
                     document.getElementById('cacheBadge').textContent = `🔍 HYBRID RRF SEARCH (${data.latency_ms}ms)`;
-                    document.getElementById('scoreBadge').textContent = `Indexed & Cached for future`;
+                    document.getElementById('scoreBadge').textContent = `Indexed into Cache`;
+                    document.getElementById('matchedQueryInfo').style.display = 'none';
+
+                    const chunksCont = document.getElementById('chunksContainer');
+                    const chunksList = document.getElementById('chunksList');
+                    chunksList.innerHTML = '';
+                    if (data.retrieved_chunks && data.retrieved_chunks.length > 0) {
+                        chunksCont.style.display = 'block';
+                        data.retrieved_chunks.forEach(c => {
+                            const div = document.createElement('div');
+                            div.style.cssText = 'background: rgba(255,255,255,0.03); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 10px; margin-bottom: 6px; font-size: 0.78rem;';
+                            div.innerHTML = `<span style="color: #a855f7; font-weight: 700;">[${c.source}]</span> ${c.text} <div style="font-family: var(--font-mono); color: var(--text-dim); font-size: 0.7rem; margin-top: 4px;">RRF Score: ${c.score}</div>`;
+                            chunksList.appendChild(div);
+                        });
+                    } else {
+                        chunksCont.style.display = 'none';
+                    }
 
                     log(`🔍 [CACHE MISS -> RAG PIPELINE] Executed Dense + BM25 search in ${data.latency_ms}ms. Response generated & cached.`, 'miss');
                 }
             } catch (e) {
                 log('Error executing query: ' + e.message, 'miss');
+            }
+        }
+
+        async function ingestCustomDoc() {
+            const title = document.getElementById('docTitle').value.trim();
+            const content = document.getElementById('docContent').value.trim();
+
+            if (!title || !content) {
+                alert('Please enter both a title and content for your custom document.');
+                return;
+            }
+
+            log(`Indexing custom document: "${title}" into vector store...`);
+            try {
+                const res = await fetch('/v1/documents', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify([{ title: title, content: content }])
+                });
+                const d = await res.json();
+                if (res.ok) {
+                    log(`✓ [INGESTED] Successfully embedded and indexed "${title}"! Total docs in index: ${d.total_documents}`, 'hit');
+                    alert(`Document "${title}" indexed! You can now ask any question about it in the query box.`);
+                    document.getElementById('docTitle').value = '';
+                    document.getElementById('docContent').value = '';
+                } else {
+                    log(`Error indexing document: ${JSON.stringify(d)}`, 'miss');
+                }
+            } catch (e) {
+                log('Ingestion network error: ' + e.message, 'miss');
             }
         }
 

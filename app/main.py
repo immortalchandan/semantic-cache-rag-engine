@@ -92,7 +92,7 @@ async def query_pipeline(req: QueryRequest):
     query_vector = embedding_service.embed_text(req.query)
 
     # Step 2: Check Semantic Vector Cache (sub-15ms cosine similarity lookup)
-    cache_hit, cached_response, similarity_score = semantic_cache.get_cached(
+    cache_hit, cached_response, similarity_score, matched_query = semantic_cache.get_cached(
         query_vector, threshold=req.similarity_threshold
     )
 
@@ -103,6 +103,7 @@ async def query_pipeline(req: QueryRequest):
             response=cached_response,
             cache_hit=True,
             similarity_score=round(similarity_score, 4) if similarity_score else None,
+            matched_cached_query=matched_query,
             latency_ms=round(latency_ms, 2),
             retrieval_method="SEMANTIC_CACHE",
             retrieved_chunks=[]

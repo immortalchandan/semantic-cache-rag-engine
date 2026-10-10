@@ -29,6 +29,7 @@ class QueryResponse(BaseModel):
     response: str
     cache_hit: bool
     similarity_score: Optional[float] = None
+    matched_cached_query: Optional[str] = None
     latency_ms: float
     retrieval_method: str  # "SEMANTIC_CACHE" or "HYBRID_RRF_RERANK"
     retrieved_chunks: List[RetrievedChunk] = Field(default_factory=list)
