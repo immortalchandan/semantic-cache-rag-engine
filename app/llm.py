@@ -67,22 +67,26 @@ class LLMService:
                 "Direct Answer (2-4 sentences):"
             )
 
-        # Gemini Flash model fallback ladder: latest Flash models down to earlier versions
+        # Gemini Flash model fallback ladder: verified active models
         models_to_try = [
-            "gemini-2.5-flash",
-            "gemini-2.0-flash",
-            "gemini-1.5-flash"
+            "gemini-3.5-flash",
+            "gemini-3.5-flash-lite",
+            "gemini-3.6-flash",
+            "gemini-3.8-flash"
         ]
 
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.2, "maxOutputTokens": 300}
-        }
-
-        async with httpx.AsyncClient(timeout=12.0) as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             for model_name in models_to_try:
                 try:
                     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+                    gen_config = {"temperature": 0.2, "maxOutputTokens": 600}
+                    if "lite" not in model_name:
+                        gen_config["thinkingConfig"] = {"thinkingBudget": 0}
+
+                    payload = {
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": gen_config
+                    }
                     resp = await client.post(url, json=payload)
                     if resp.status_code == 200:
                         data = resp.json()
@@ -93,9 +97,9 @@ class LLMService:
                                 logger.info("Successfully generated response using model %s: %s", model_name, text[:80])
                                 return text
                     else:
-                        logger.error("Gemini model %s call failed with HTTP %d: %s", model_name, resp.status_code, resp.text)
+                        logger.warning("Gemini model %s returned status %d: %s. Trying next...", model_name, resp.status_code, resp.text[:120])
                 except Exception as e:
-                    logger.error("Gemini model %s network/client error: %s", model_name, e)
+                    logger.warning("Gemini model %s error: %s. Trying next...", model_name, e)
 
         # If all Gemini models are exhausted or fail, fall back to intelligent local synthesis
         return self._synthesize_locally(query, context_chunks)

@@ -1,7 +1,11 @@
+import os
 import time
 import logging
 from contextlib import asynccontextmanager
 from typing import List
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -85,6 +89,7 @@ def serve_dashboard():
 
 @app.post("/v1/query", response_model=QueryResponse)
 async def query_pipeline(req: QueryRequest):
+    logger.info("Received query request: '%s' | API Key present: %s", req.query, bool(req.api_key))
     start_time = time.perf_counter()
     embedding_service = get_embedding_service()
 
