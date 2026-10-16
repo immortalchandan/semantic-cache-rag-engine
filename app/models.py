@@ -34,3 +34,22 @@ class QueryResponse(BaseModel):
     latency_ms: float
     retrieval_method: str  # "SEMANTIC_CACHE" or "HYBRID_RRF_RERANK"
     retrieved_chunks: List[RetrievedChunk] = Field(default_factory=list)
+
+
+class ComparisonRequest(BaseModel):
+    query_a: str = Field(..., description="First query or baseline prompt")
+    query_b: str = Field(..., description="Second query or paraphrase candidate")
+    threshold: float = Field(0.85, ge=0.5, le=1.0, description="Cosine similarity threshold for cache hits")
+
+
+class ComparisonResponse(BaseModel):
+    query_a: str
+    query_b: str
+    cosine_similarity: float
+    euclidean_distance: float
+    token_overlap_jaccard: float
+    threshold: float
+    cache_hit_predicted: bool
+    estimated_latency_saved_ms: float
+    estimated_speedup_percent: float
+    explanation: str

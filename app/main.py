@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.models import QueryRequest, QueryResponse, IngestDocument
+from app.models import QueryRequest, QueryResponse, IngestDocument, ComparisonRequest, ComparisonResponse
 from app.embedding import get_embedding_service
 from app.semantic_cache import SemanticCache
 from app.retriever import HybridRetriever
@@ -184,3 +184,44 @@ def get_engine_stats():
         "embedding_dimensions": 384,
         "similarity_metric": "cosine"
     }
+
+
+@app.post("/v1/compare", response_model=ComparisonResponse)
+def compare_queries_endpoint(req: ComparisonRequest):
+    import numpy as np
+    import math
+
+    embedding_service = get_embedding_service()
+    vec_a = embedding_service.embed_text(req.query_a)
+    vec_b = embedding_service.embed_text(req.query_b)
+
+    cosine_sim = float(np.dot(vec_a, vec_b))
+    euclidean_dist = float(math.sqrt(max(0.0, 2.0 * (1.0 - cosine_sim))))
+
+    tokens_a = set(req.query_a.lower().split())
+    tokens_b = set(req.query_b.lower().split())
+    intersection = len(tokens_a.intersection(tokens_b))
+    union = len(tokens_a.union(tokens_b))
+    jaccard = float(intersection / union) if union > 0 else 0.0
+
+    cache_hit = cosine_sim >= req.threshold
+    est_latency_saved = 1250.0 - 14.0 if cache_hit else 0.0
+    speedup_pct = round(((1250.0 - 14.0) / 1250.0) * 100.0, 1) if cache_hit else 0.0
+
+    if cache_hit:
+        explanation = f"Cosine similarity ({cosine_sim:.4f}) >= threshold ({req.threshold:.2f}). Query B is served directly from sub-15ms semantic vector cache, completely bypassing LLM generation and saving ~180 tokens."
+    else:
+        explanation = f"Cosine similarity ({cosine_sim:.4f}) < threshold ({req.threshold:.2f}). Query B introduces semantic shift or distinct intent, correctly routed to Hybrid RAG (Dense + BM25 RRF) pipeline."
+
+    return ComparisonResponse(
+        query_a=req.query_a,
+        query_b=req.query_b,
+        cosine_similarity=round(cosine_sim, 4),
+        euclidean_distance=round(euclidean_dist, 4),
+        token_overlap_jaccard=round(jaccard, 4),
+        threshold=req.threshold,
+        cache_hit_predicted=cache_hit,
+        estimated_latency_saved_ms=est_latency_saved,
+        estimated_speedup_percent=speedup_pct,
+        explanation=explanation
+    )

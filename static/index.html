@@ -588,6 +588,68 @@
                 </div>
             </div>
         </div>
+
+        <!-- Semantic Vector Distance & Threshold Simulator Playground -->
+        <div class="glass-card" style="margin-top: 24px; border-color: rgba(56, 189, 248, 0.3); background: rgba(15, 23, 42, 0.75);">
+            <div class="card-header" style="border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-bottom: 12px; margin-bottom: 18px;">
+                <div class="card-title" style="color: #38bdf8;">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
+                    Interactive Semantic Distance & Threshold Simulator
+                </div>
+                <span class="tech-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3);">REAL-TIME EMBEDDINGS COMPARATOR</span>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                <div class="input-group">
+                    <label class="input-label">Query A (Baseline Cached Query)</label>
+                    <input type="text" id="compareQueryA" class="input-control" value="What is the refund policy for customers?" placeholder="Enter first query...">
+                </div>
+                <div class="input-group">
+                    <label class="input-label">Query B (Incoming User Query Candidate)</label>
+                    <input type="text" id="compareQueryB" class="input-control" value="How do I get my money back if I cancel?" placeholder="Enter candidate query...">
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;">
+                <button class="chip" onclick="setComparePreset('What is the refund policy for customers?', 'How do I get my money back if I cancel?', 0.85)">🎯 High Cosine (~0.88 - Cache Hit)</button>
+                <button class="chip" onclick="setComparePreset('What is the refund policy for customers?', 'What are the production API rate limits?', 0.85)">⛔ Topic Divergence (~0.32 - Cache Miss)</button>
+                <button class="chip" onclick="setComparePreset('What are the production API rate limits?', 'How many requests per minute can my client send?', 0.80)">🔄 Paraphrase (~0.83 - Threshold Hit)</button>
+            </div>
+
+            <div style="display: flex; gap: 16px; align-items: center; margin-bottom: 20px;">
+                <button class="btn btn-primary" onclick="runVectorComparison()" style="max-width: 240px; background: linear-gradient(135deg, #0284c7, #38bdf8);">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                    Compare Vectors
+                </button>
+                <div style="flex: 1; display: flex; align-items: center; gap: 12px; font-family: var(--font-mono); font-size: 0.82rem; color: var(--text-dim);">
+                    <span>Threshold: 0.85</span>
+                    <span>• Metric: Cosine Similarity on 384-D Unit Hypersphere</span>
+                </div>
+            </div>
+
+            <!-- Comparison Results Box -->
+            <div id="compareResultsCard" style="display: none; background: rgba(10, 15, 28, 0.7); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 18px;">
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px;">
+                    <div class="metric-item">
+                        <div class="val" id="resCosineSim" style="color: #38bdf8;">--</div>
+                        <div class="lbl">Cosine Similarity</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="val" id="resEuclidean" style="color: #a855f7;">--</div>
+                        <div class="lbl">Euclidean L2 Distance</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="val" id="resJaccard" style="color: #f59e0b;">--</div>
+                        <div class="lbl">Lexical Jaccard Overlap</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="val" id="resDecision" style="font-size: 1rem;">--</div>
+                        <div class="lbl">Routing Decision</div>
+                    </div>
+                </div>
+                <div id="resExplanation" style="font-size: 0.84rem; line-height: 1.5; color: #cbd5e1; font-family: var(--font-sans); background: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border-left: 3px solid #38bdf8;"></div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -732,6 +794,59 @@
                 log('[CACHE FLUSHED] Semantic vector cache emptied.', 'system');
             } catch (e) {
                 log('Error clearing cache: ' + e.message, 'miss');
+            }
+        }
+
+        function setComparePreset(qA, qB, th) {
+            document.getElementById('compareQueryA').value = qA;
+            document.getElementById('compareQueryB').value = qB;
+            runVectorComparison(th);
+        }
+
+        async function runVectorComparison(customThreshold = null) {
+            const qA = document.getElementById('compareQueryA').value.trim();
+            const qB = document.getElementById('compareQueryB').value.trim();
+            const threshold = customThreshold !== null ? customThreshold : 0.85;
+
+            if (!qA || !qB) return;
+
+            log(`🔬 [VECTOR COMPARISON] Comparing Query A ("${qA}") vs Query B ("${qB}")`);
+
+            try {
+                const res = await fetch('/v1/compare', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        query_a: qA,
+                        query_b: qB,
+                        threshold: threshold
+                    })
+                });
+
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+                const data = await res.json();
+                const card = document.getElementById('compareResultsCard');
+                card.style.display = 'block';
+
+                document.getElementById('resCosineSim').textContent = data.cosine_similarity.toFixed(4);
+                document.getElementById('resEuclidean').textContent = data.euclidean_distance.toFixed(4);
+                document.getElementById('resJaccard').textContent = (data.token_overlap_jaccard * 100).toFixed(1) + '%';
+
+                const decEl = document.getElementById('resDecision');
+                if (data.cache_hit_predicted) {
+                    decEl.textContent = '🎯 CACHE HIT';
+                    decEl.style.color = '#34d399';
+                    log(`✓ [VECTOR SIMULATOR HIT] Cosine ${data.cosine_similarity} >= ${data.threshold}. Sub-15ms return with 0 tokens spent!`, 'hit');
+                } else {
+                    decEl.textContent = '⚡ ROUTE TO RAG';
+                    decEl.style.color = '#f59e0b';
+                    log(`🔍 [VECTOR SIMULATOR MISS] Cosine ${data.cosine_similarity} < ${data.threshold}. Routed to full Hybrid RAG retrieval.`, 'miss');
+                }
+
+                document.getElementById('resExplanation').textContent = data.explanation;
+            } catch (err) {
+                log('Comparison error: ' + err.message, 'miss');
             }
         }
     </script>
